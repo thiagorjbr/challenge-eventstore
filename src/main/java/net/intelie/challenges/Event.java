@@ -19,4 +19,9 @@ public class Event {
     public long timestamp() {
         return timestamp;
     }
+
+	@Override
+	public String toString() {
+		return "Event [timestamp=" + timestamp + "]";
+	}
 }
