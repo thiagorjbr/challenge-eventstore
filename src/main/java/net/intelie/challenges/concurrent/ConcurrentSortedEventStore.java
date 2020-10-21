@@ -16,7 +16,7 @@ public class ConcurrentSortedEventStore implements EventStore {
 	private final int paginationCheckPoint;
 	private final int maxCheckPoints;
 
-	ConcurrentSkipListSet<ConcurrentEventIterator> checkPoint;
+	protected ConcurrentSkipListSet<ConcurrentEventIterator> checkPoint;
 
 	private AtomicInteger length;
 
@@ -24,7 +24,7 @@ public class ConcurrentSortedEventStore implements EventStore {
 		this.length = new AtomicInteger(0);
 		this.checkPoint = new ConcurrentSkipListSet<ConcurrentEventIterator>(new EventComparator());
 		this.checkPoint.add(new ConcurrentEventIterator());
-		this.paginationCheckPoint = this.DEFAULT_PAGINATION_CHECKPOINT;
+		this.paginationCheckPoint = DEFAULT_PAGINATION_CHECKPOINT;
 		this.maxCheckPoints = 0;
 	}
 
@@ -40,37 +40,43 @@ public class ConcurrentSortedEventStore implements EventStore {
 		this.length = new AtomicInteger(0);
 		this.checkPoint = new ConcurrentSkipListSet<ConcurrentEventIterator>(new EventComparator());
 		this.checkPoint.add(new ConcurrentEventIterator());
-		this.paginationCheckPoint = this.DEFAULT_PAGINATION_CHECKPOINT;
+		this.paginationCheckPoint = DEFAULT_PAGINATION_CHECKPOINT;
 		this.maxCheckPoints = maxCheckPoints;
 	}
 
 	@Override
 	public void insert(Event event) {
-		if (event == null || event.type() == null || event.type().trim().isEmpty()) {
-			throw new IllegalArgumentException();
+		if (event == null) {
+			throw new IllegalArgumentException("Event cannot be null");
+		} else if (event.type() == null || event.type().trim().isEmpty()) {
+			throw new IllegalArgumentException("Type cannot be null or empty");
 		}
 
 		ConcurrentEventIterator current = checkPoint.first();
 		int posCheckPoint = 0;
 		ConcurrentEventIterator virtualCurrent = checkPoint.first();
 
-		{
-			Iterator<ConcurrentEventIterator> it = checkPoint.descendingIterator();
-			int i = checkPoint.size();
-			while (it.hasNext()) {
-				ConcurrentEventIterator c = it.next();
-				if (c.value != null && c.value.timestamp() < event.timestamp()) {
-					current = c;
-					virtualCurrent = c;
-					posCheckPoint = --i;
-					break;
-				}
+		Iterator<ConcurrentEventIterator> it = checkPoint.descendingIterator();
+		int i = checkPoint.size();
+		while (it.hasNext()) {
+			ConcurrentEventIterator c = it.next();
+			if (c.value != null && c.value.timestamp() < event.timestamp()) {
+				current = c;
+				virtualCurrent = c;
+				posCheckPoint = --i;
+				break;
 			}
 		}
 
 		length.incrementAndGet();
 
 		current.lock.lock();
+
+		if (!current.isValid) {
+			current.lock.unlock();
+			insert(event);
+			return;
+		}
 
 		int lockCount = current.lock.getHoldCount();
 
@@ -82,21 +88,6 @@ public class ConcurrentSortedEventStore implements EventStore {
 			current.value = event;
 			current.lock.unlock();
 			return;
-		}
-
-		if (current.next == null) {
-			try {
-				if (current.value.timestamp() > event.timestamp()) {
-					ConcurrentEventIterator aux = new ConcurrentEventIterator(current.next, current.value);
-					current.value = event;
-					current.next = aux;
-				} else {
-					current.next = new ConcurrentEventIterator(current.next, event);
-				}
-				return;
-			} finally {
-				current.lock.unlock();
-			}
 		}
 
 		ConcurrentEventIterator prev = null;
@@ -150,39 +141,139 @@ public class ConcurrentSortedEventStore implements EventStore {
 
 	@Override
 	public void removeAll(String type) {
+		if (type == null || type.trim().isEmpty()) {
+			throw new IllegalArgumentException("Type cannot be null or empty");
+		}
+		
 		ConcurrentEventIterator current = checkPoint.first();
+		ConcurrentEventIterator prev = null;
+		ConcurrentEventIterator next = null;
 
-		while (current != null) {
-			ReentrantLock lock = current.lock;
-			lock.lock();
-			try {
+		try {
+			current.lock.lock();
+			while (current != null) {
+				if (current.next != null) {
+					current.next.lock.lock();
+					next = current.next;
+				} else if (current.value == null) {
+					current.lock.unlock();
+					return;
+				}
+				
+				boolean permissionToUnlockPrev = true;
+
+				if (current.value.type().equals(type)) {
+					length.decrementAndGet();
+					if (prev == null) {
+						if (next == null) {
+							current.value = null;
+							current.lock.unlock();
+							return;
+						} else {
+							subSetIf(current, next);
+							current.next = null;
+							current.isValid = false;
+							current.lock.unlock();
+							current = next;
+							continue;
+						}
+					} else if (next == null) {
+						subSetIf(current, prev);
+						prev.next = null;
+						current.isValid = false;
+						current.lock.unlock();
+						return;
+					} else {
+						prev.next = next;
+						subSetIf(current, prev);
+						current.isValid = false;
+						current.next = null;
+						current.lock.unlock();
+						current = prev;
+						permissionToUnlockPrev = false;
+					}
+				}
+
+				if (prev != null && permissionToUnlockPrev) {
+					prev.lock.unlock();
+				}
+
+				prev = current;
 				current = current.next;
-			} finally {
-				lock.unlock();
+			}
+		} finally {
+			if (prev != null) {
+				prev.lock.unlock();
 			}
 		}
 	}
 
 	@Override
 	public EventIterator query(String type, long startTime, long endTime) {
+		if (startTime > endTime) {
+			throw new IllegalArgumentException("startTime greater than endTime");
+		} else if (type == null || type.trim().isEmpty()) {
+			throw new IllegalArgumentException("Type cannot be null or empty");
+		}
+		
+		ConcurrentEventIterator current = checkPoint.first();
 
-		return null;
+		Iterator<ConcurrentEventIterator> it = checkPoint.descendingIterator();
+		while (it.hasNext()) {
+			ConcurrentEventIterator c = it.next();
+			if (c.value != null && c.value.timestamp() < startTime) {
+				current = c;
+				break;
+			}
+		}
+		
+		if (current.value == null) {
+			return null;
+		}
+		
+		ConcurrentEventIterator newIteratorHead = null;
+		ConcurrentEventIterator newIteratorCurrent = null;
+		
+		while (current != null) {
+			ReentrantLock lock = current.lock;
+			lock.lock();
+			try {
+				if (current.value.timestamp() >= startTime && current.value.timestamp() <= endTime && current.value.type().equals(type)) {
+					Event event = new Event(current.value.type(), current.value.timestamp());
+					ConcurrentEventIterator newIterator = new ConcurrentEventIterator(event);
+					
+					if (newIteratorHead == null) {
+						newIteratorHead = newIterator;
+						newIteratorCurrent = newIteratorHead;
+					} else {
+						newIteratorCurrent.next = newIterator;
+						newIteratorCurrent = newIterator;
+					}
+				} else if (current.value.timestamp() > endTime) {
+					break;
+				}
+				current = current.next;
+			} finally {
+				lock.unlock();
+			}
+		}
+
+		return newIteratorHead;
 	}
 
 	public int length() {
 		return length.get();
 	}
-
-	public boolean isSorted() {
-		ConcurrentEventIterator current = checkPoint.first();
-
-		while (current.next != null && current != null) {
-			if (current.value.timestamp() > current.next.value.timestamp()) {
-				return false;
+	
+	private void subSetIf(ConcurrentEventIterator fromElement, ConcurrentEventIterator toElement) {
+		if (checkPoint.contains(fromElement)) {
+			if (fromElement.value.timestamp() < toElement.value.timestamp()) {
+				checkPoint.subSet(fromElement, toElement);
+			} else {
+				checkPoint.remove(fromElement);
+				checkPoint.add(toElement);
 			}
-			current = current.next;
 		}
-		return true;
 	}
 
 	private class EventComparator implements Comparator<ConcurrentEventIterator> {

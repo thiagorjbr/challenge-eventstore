@@ -9,8 +9,9 @@ public class ConcurrentEventIterator implements EventIterator {
 
 	protected ConcurrentEventIterator next;
 	protected Event value;
-	protected ReentrantLock lock = new ReentrantLock();
-	
+	protected final ReentrantLock lock = new ReentrantLock();
+	protected boolean isValid = true;
+
 	public ConcurrentEventIterator() {
 	}
 
@@ -19,7 +20,7 @@ public class ConcurrentEventIterator implements EventIterator {
 		this.next = next;
 		this.value = value;
 	}
-	
+
 	public ConcurrentEventIterator(Event value) {
 		super();
 		this.next = null;
@@ -35,14 +36,9 @@ public class ConcurrentEventIterator implements EventIterator {
 	@Override
 	public boolean moveNext() {
 		if (next != null) {
-			try {
-				lock.lock();
-				value = next.value;
-				next = next.next;
-				return true;
-			} finally {
-				lock.unlock();
-			}
+			value = next.value;
+			next = next.next;
+			return true;
 		}
 		return false;
 	}
