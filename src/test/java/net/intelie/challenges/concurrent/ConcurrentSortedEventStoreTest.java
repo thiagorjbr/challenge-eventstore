@@ -98,7 +98,6 @@ public class ConcurrentSortedEventStoreTest {
 		System.out.println(con.length());
 		System.out.println(isSorted(con.checkPoint.first()));
 		System.out.println(con.checkPoint.size());
-		
 	}
 	
 	@Test
@@ -114,7 +113,7 @@ public class ConcurrentSortedEventStoreTest {
 		Thread t7 = new Thread(new MyRunnableInsert(con));
 		Thread t8 = new Thread(new MyRunnableInsert(con));
 		Thread t9 = new Thread(new MyRunnableInsert(con));
-		Thread t10 = new Thread(new MyRunnableInsert(con));
+		Thread t10 = new Thread(new MyRunnableInsert(con, "delete"));
 		Thread t11 = new Thread(new MyRunnableRemove(con, "delete"));
 
 		long init = System.currentTimeMillis();
@@ -129,11 +128,9 @@ public class ConcurrentSortedEventStoreTest {
 		t8.start();
 		t9.start();
 		t10.start();
+		
+		Thread.sleep(1000);
 		t11.start();
-		
-		Thread.sleep(5000);
-		
-		con.removeAll("delete");
 		
 		t1.join();
 		t2.join();
@@ -186,9 +183,6 @@ public class ConcurrentSortedEventStoreTest {
 		t9.start();
 		t10.start();
 		
-		Thread.sleep(5000);
-		EventIterator ei = con.query("query", 1000, 5000);
-		
 		t1.join();
 		t2.join();
 		t3.join();
@@ -200,6 +194,7 @@ public class ConcurrentSortedEventStoreTest {
 		t9.join();
 		t10.join();
 		
+		EventIterator ei = con.query("query", 1000, 5000);
 
 		System.out.println("execution time: " + (System.currentTimeMillis() - init));
 
@@ -208,7 +203,9 @@ public class ConcurrentSortedEventStoreTest {
 		System.out.println(isSorted(con.checkPoint.first()));
 		System.out.println(con.checkPoint.size());
 		System.out.println("newIterator: " + size((ConcurrentEventIterator) ei));
+		System.out.println("newIterator: " + size(ei));
 		System.out.println("newIterator: " + isSorted((ConcurrentEventIterator) ei));
+		System.out.println("newIterator: " + isSorted(ei));
 	}
 	
 	@Test
@@ -266,6 +263,7 @@ public class ConcurrentSortedEventStoreTest {
 		System.out.println(isSorted(con.checkPoint.first()));
 		System.out.println(con.checkPoint.size());
 		System.out.println("newIterator: " + size((ConcurrentEventIterator) ei));
+		System.out.println("newIterator: " + size(ei));
 		System.out.println("newIterator: " + isSorted((ConcurrentEventIterator) ei));
 		System.out.println(size((ConcurrentEventIterator) con.query("query", 10000, 15000)));
 	}
@@ -286,6 +284,20 @@ public class ConcurrentSortedEventStoreTest {
 
 		return count;
 	}
+	
+	private int size(EventIterator current) {
+		int count = 0;
+
+		if (current == null) {
+			return 0;
+		}
+		
+		do {
+			++count;
+		} while (current.moveNext());
+
+		return count;
+	}
 
 	private boolean isSorted(ConcurrentEventIterator current) {
 
@@ -295,6 +307,25 @@ public class ConcurrentSortedEventStoreTest {
 			}
 			current = current.next;
 		}
+		return true;
+	}
+	
+	private boolean isSorted(EventIterator it) {
+		
+		if (it == null || it.current() == null) {
+			return false;
+		}
+		
+		Event prev = it.current();
+		
+		do {
+			Event current = it.current();
+			if (current.timestamp() < prev.timestamp()) {
+				return false;
+			}
+			prev = current;
+		} while (it.moveNext());
+
 		return true;
 	}
 }
@@ -316,7 +347,7 @@ class MyRunnableInsert implements Runnable {
 	public void run() {
 		long init = System.currentTimeMillis();
 		
-		for (int i = 0; i < 35000; i++) {
+		for (int i = 0; i < 5000; i++) {
 			Event event = new Event(type, new Random().nextInt(2000000));
 			con.insert(event);
 		}
@@ -344,10 +375,7 @@ class MyRunnableRemove implements Runnable {
 	public void run() {
 		long init = System.currentTimeMillis();
 		
-		for (int i = 0; i < 35000; i++) {
-			Event event = new Event(type, new Random().nextInt(2000000));
-			con.insert(event);
-		}
+		con.removeAll(type);
 
 		System.out.println(
 				"execution time " + Thread.currentThread().getName() + ": " + (System.currentTimeMillis() - init));
