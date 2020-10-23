@@ -372,11 +372,10 @@ public class ConcurrentSortedEventStore implements EventStore {
 	 * @param toElement   the {@link ConcurrentEventIterator} the will be the new
 	 *                    checkpoint.
 	 */
-	private synchronized void replaceCheckPoint(ConcurrentEventIterator fromElement,
-			ConcurrentEventIterator toElement) {
+	private void replaceCheckPoint(ConcurrentEventIterator fromElement, ConcurrentEventIterator toElement) {
 		if (checkPoint.contains(fromElement)) {
-			checkPoint.remove(fromElement);
 			checkPoint.add(toElement);
+			checkPoint.remove(fromElement);
 		}
 	}
 

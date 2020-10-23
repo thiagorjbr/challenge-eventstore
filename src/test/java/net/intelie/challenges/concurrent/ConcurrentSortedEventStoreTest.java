@@ -412,11 +412,11 @@ public class ConcurrentSortedEventStoreTest {
 	public void insertAndRemoveTogetherTest() throws InterruptedException {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
 
-		Thread t1 = new Thread(new MyRunnableInsert(con, "delete"));
-		Thread t2 = new Thread(new MyRunnableInsert(con));
-		Thread t3 = new Thread(new MyRunnableInsert(con));
-		Thread t4 = new Thread(new MyRunnableInsert(con));
-		Thread t5 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t1 = new Thread(new MyRunnableInsert(con, "delete", 0L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 10000L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, 20000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete", 15000L));
 		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
 
 		t1.start();
