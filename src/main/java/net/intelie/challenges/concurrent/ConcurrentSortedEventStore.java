@@ -12,21 +12,34 @@ import net.intelie.challenges.EventStore;
 
 /**
  * 
- * <p>A concurrent sorted implementation of the {@link EventStore}
+ * <p>
+ * A concurrent sorted implementation of the {@link EventStore}
  * 
- * <p><br>This thread-safe implementation of an ordered linked list stores {@link Event}. {@link EventIterator} allows navigation through events 
- * ordered by <i>timestamp</i> inside an {@link Event}. Also, it creates some indexes, named <i>checkPoint</i>,
- * in order to improve performance of the search on a iterator. These checkPoints are created and reorganized automatically,
- * can be limited on the constructor and can be reorganized by the pagination on the constructor.
+ * <p>
+ * <br>
+ * This thread-safe implementation of an ordered linked list stores
+ * {@link Event}. {@link EventIterator} allows navigation through events ordered
+ * by <i>timestamp</i> inside an {@link Event}. Also, it creates some indexes,
+ * named <i>checkPoint</i>, in order to improve performance of the search on a
+ * iterator. These checkPoints are created and reorganized automatically, can be
+ * limited on the constructor and can be reorganized by the pagination on the
+ * constructor.
  * 
- * <p><br>{@link ConcurrentSkipListSet} stores checkPoints and is ordered by <i>timestamp</i>. The paginations
- * is configurable and works like this: for each ten thousand {@link Event} stored a checkpoint is created.
- * <br>You can limit the number of the checkpoints. If you don't limit, the limit will be the number of elements in this store
- * divided by pagination number did you set or the default number ten thousand.  
+ * <p>
+ * <br>
+ * {@link ConcurrentSkipListSet} stores checkPoints and is ordered by
+ * <i>timestamp</i>. The paginations is configurable and works like this: for
+ * each ten thousand {@link Event} stored a checkpoint is created. <br>
+ * You can limit the number of the checkpoints. If you don't limit, the limit
+ * will be the number of elements in this store divided by pagination number did
+ * you set or the default number ten thousand.
  * 
- * <p><br>This class implements a safely concurrent execution of insertion, removal and query operations on {@link Event}.
- * insert operation of an {@link Event} or remove all {@link Event} by type or search for a {@link Event} by type between two
- * timestamps. 
+ * <p>
+ * <br>
+ * This class implements a safely concurrent execution of insertion, removal and
+ * query operations on {@link Event}. insert operation of an {@link Event} or
+ * remove all {@link Event} by type or search for a {@link Event} by type
+ * between two timestamps.
  *
  */
 public class ConcurrentSortedEventStore implements EventStore {
@@ -43,7 +56,9 @@ public class ConcurrentSortedEventStore implements EventStore {
 	private AtomicInteger length;
 
 	/**
-	 * <p>This constructor doesn't limit the amount of checkpoints and is based on pagination's default configuration, which is valued at 10000.
+	 * <p>
+	 * This constructor doesn't limit the amount of checkpoints and is based on
+	 * pagination's default configuration, which is valued at 10000.
 	 */
 	public ConcurrentSortedEventStore() {
 		this.length = new AtomicInteger(0);
@@ -55,9 +70,12 @@ public class ConcurrentSortedEventStore implements EventStore {
 
 	/**
 	 * 
-	 * @param paginationCheckPoint express the quantity of elements is allowed on the iterator before creating a new checkpoint.
-	 * @param maxCheckPoints is the maximum number of checkpoints. When valued in zero, the maximum created checkpoint
-	 * will be the limit number of elements in this store divided by <b>paginationCheckPoint</b>.
+	 * @param paginationCheckPoint express the quantity of elements is allowed on
+	 *                             the iterator before creating a new checkpoint.
+	 * @param maxCheckPoints       is the maximum number of checkpoints. When valued
+	 *                             in zero, the maximum created checkpoint will be
+	 *                             the limit number of elements in this store
+	 *                             divided by <b>paginationCheckPoint</b>.
 	 */
 	public ConcurrentSortedEventStore(int paginationCheckPoint, int maxCheckPoints) {
 		this.length = new AtomicInteger(0);
@@ -68,10 +86,14 @@ public class ConcurrentSortedEventStore implements EventStore {
 	}
 
 	/**
-	 * <p>This constructor uses the default max number of pagination (ten thousand)
+	 * <p>
+	 * This constructor uses the default max number of pagination (ten thousand)
 	 * 
-	 * @param maxCheckPoints is the limit of the possible checkpoint will be creates. If this parameter is zero, the max created checkpoint
-	 * will be the limit will be the number of elements in this store divided by ten thousand (default).
+	 * @param maxCheckPoints is the limit of the possible checkpoint will be
+	 *                       creates. If this parameter is zero, the max created
+	 *                       checkpoint will be the limit will be the number of
+	 *                       elements in this store divided by ten thousand
+	 *                       (default).
 	 */
 	public ConcurrentSortedEventStore(int maxCheckPoints) {
 		this.length = new AtomicInteger(0);
@@ -82,7 +104,8 @@ public class ConcurrentSortedEventStore implements EventStore {
 	}
 
 	/**
-	 * <p>Inserts an event into an ordered chain. 
+	 * <p>
+	 * Inserts an event into an ordered chain.
 	 */
 	@Override
 	public void insert(Event event) {
@@ -94,10 +117,10 @@ public class ConcurrentSortedEventStore implements EventStore {
 
 		// gets the first element of the chain.
 		ConcurrentEventIterator current = checkPoint.first();
-		
+
 		// stores checkpoint's position.
 		int posCheckPoint = 0;
-		
+
 		// creates a virtual current event iterator to change checkpoint if needed.
 		ConcurrentEventIterator virtualCurrent = checkPoint.first();
 
@@ -119,8 +142,10 @@ public class ConcurrentSortedEventStore implements EventStore {
 
 		current.lock.lock();
 
-		// this happens when calling removeAll method at the same time of the insertion operation. When removeAll holds the lock of this element of the chain
-		// and this current is the same element of the checkpoint it can get an removed element of the chain and this is a invalid element. 
+		// this happens when calling removeAll method at the same time of the insertion
+		// operation. When removeAll holds the lock of this element of the chain
+		// and this current is the same element of the checkpoint it can get an removed
+		// element of the chain and this is a invalid element.
 		if (!current.isValid) {
 			current.lock.unlock();
 			insert(event);
@@ -139,7 +164,8 @@ public class ConcurrentSortedEventStore implements EventStore {
 		try {
 			long count = 0L;
 
-			// this loop navigates the ordered chain of events to put the new one or just reorganize the checkpoints.
+			// this loop navigates the ordered chain of events to put the new one or just
+			// reorganize the checkpoints.
 			do {
 				// put the event in the ordered chain.
 				if (current.value.timestamp() > event.timestamp()) {
@@ -151,7 +177,8 @@ public class ConcurrentSortedEventStore implements EventStore {
 				}
 
 				count++;
-				// create or reorganize the checkpoints of the chain according to the pagination and the max number of checkpoints.
+				// create or reorganize the checkpoints of the chain according to the pagination
+				// and the max number of checkpoints.
 				long countPos = paginationCheckPoint * posCheckPoint + count;
 				if (countPos % paginationCheckPoint == 0) {
 					int pos = (int) Math.floorDiv(countPos, paginationCheckPoint);
@@ -160,8 +187,7 @@ public class ConcurrentSortedEventStore implements EventStore {
 							: checkPoint.size() <= maxCheckPoints) {
 						checkPoint.add(current);
 					} else {
-						// Don't call the method subSetCheckPoint because this method do have two more validations that no needs.
-						checkPoint.subSet(virtualCurrent, current);
+						replaceCheckPoint(virtualCurrent, current);
 					}
 				}
 
@@ -177,7 +203,7 @@ public class ConcurrentSortedEventStore implements EventStore {
 				current = current.next;
 
 			} while (current != null);
-			
+
 			// this code is reached when the event is inserted in the last chain's position.
 			prev.next = new ConcurrentEventIterator(event);
 		} finally {
@@ -201,10 +227,10 @@ public class ConcurrentSortedEventStore implements EventStore {
 			current.lock.lock();
 			while (current != null) {
 				// verify if the current node is the last on this chain.
-				if (current.next != null) {
-					current.next.lock.lock();
-					next = current.next;
-				// if this occurs, this chain is empty.
+				next = current.next;
+				if (next != null) {
+					next.lock.lock();
+					// if this occurs, this chain is empty.
 				} else if (current.value == null) {
 					current.lock.unlock();
 					return;
@@ -216,41 +242,42 @@ public class ConcurrentSortedEventStore implements EventStore {
 				if (current.value.type().equals(type)) {
 					// decrements chain's size.
 					length.decrementAndGet();
-					
+
 					if (prev == null) {
 						// this occurs if the chain has only one element.
 						if (next == null) {
 							current.value = null;
 							current.lock.unlock();
 							return;
-						// this occurs if it is the first element.
+							// this occurs if it is the first element.
 						} else {
-							subSetCheckPoint(current, next);
 							current.next = null;
 							current.isValid = false;
+							replaceCheckPoint(current, next);
 							current.lock.unlock();
 							current = next;
 							continue;
 						}
-					// this occurs if it is the last element on the chain.
+						// this occurs if it is the last element on the chain.
 					} else if (next == null) {
-						subSetCheckPoint(current, prev);
 						prev.next = null;
 						current.isValid = false;
+						replaceCheckPoint(current, prev);
 						current.lock.unlock();
 						return;
 					} else {
 						prev.next = next;
-						subSetCheckPoint(current, prev);
 						current.isValid = false;
 						current.next = null;
+						replaceCheckPoint(current, prev);
 						current.lock.unlock();
 						current = prev;
 						permissionToUnlockPrev = false;
 					}
 				}
 
-				// if an element was removed from the middle of the chain, there is no need to unlock the previous element. 
+				// if an element was removed from the middle of the chain, there is no need to
+				// unlock the previous element.
 				if (prev != null && permissionToUnlockPrev) {
 					prev.lock.unlock();
 				}
@@ -266,7 +293,9 @@ public class ConcurrentSortedEventStore implements EventStore {
 	}
 
 	/**
-	 * Returns a new {@link EventIterator} containing all {@link Event} of the given {@param type} and <i>timestamp</i> in the range from {@param startTime} to {@param endTime}.
+	 * Returns a new {@link EventIterator} containing all {@link Event} of the given
+	 * {@param type} and <i>timestamp</i> in the range from {@param startTime} to
+	 * {@param endTime}.
 	 * 
 	 * @param type
 	 * @param startTime
@@ -301,7 +330,7 @@ public class ConcurrentSortedEventStore implements EventStore {
 		ConcurrentEventIterator newIteratorHead = null;
 		ConcurrentEventIterator newIteratorCurrent = null;
 
-		// navigate on all Events and get the result of the query.  
+		// navigate on all Events and get the result of the query.
 		while (current != null) {
 			ReentrantLock lock = current.lock;
 			lock.lock();
@@ -335,19 +364,19 @@ public class ConcurrentSortedEventStore implements EventStore {
 	}
 
 	/**
-	 * This method replaces the checkpoint value for the new one if the {@param fromElement} is a checkpoint.
+	 * This method replaces the checkpoint value for the new one if the
+	 * {@param fromElement} is a checkpoint.
 	 * 
-	 * @param fromElement the {@link ConcurrentEventIterator} that possible will change.
-	 * @param toElement the {@link ConcurrentEventIterator} the will be the new checkpoint.
+	 * @param fromElement the {@link ConcurrentEventIterator} that possible will
+	 *                    change.
+	 * @param toElement   the {@link ConcurrentEventIterator} the will be the new
+	 *                    checkpoint.
 	 */
-	private void subSetCheckPoint(ConcurrentEventIterator fromElement, ConcurrentEventIterator toElement) {
+	private synchronized void replaceCheckPoint(ConcurrentEventIterator fromElement,
+			ConcurrentEventIterator toElement) {
 		if (checkPoint.contains(fromElement)) {
-			if (fromElement.value.timestamp() < toElement.value.timestamp()) {
-				checkPoint.subSet(fromElement, toElement);
-			} else {
-				checkPoint.remove(fromElement);
-				checkPoint.add(toElement);
-			}
+			checkPoint.remove(fromElement);
+			checkPoint.add(toElement);
 		}
 	}
 

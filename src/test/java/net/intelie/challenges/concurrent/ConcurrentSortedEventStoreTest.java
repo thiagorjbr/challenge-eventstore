@@ -1,8 +1,8 @@
 package net.intelie.challenges.concurrent;
 
 import java.util.Random;
-import java.util.concurrent.locks.ReentrantLock;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import net.intelie.challenges.Event;
@@ -11,31 +11,141 @@ import net.intelie.challenges.EventIterator;
 public class ConcurrentSortedEventStoreTest {
 	
 	@Test
-	public void ordinationTest() {
+	public void ordinationAndLengthTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con));
+		Thread t2 = new Thread(new MyRunnableInsert(con));
+		Thread t3 = new Thread(new MyRunnableInsert(con));
+		Thread t4 = new Thread(new MyRunnableInsert(con));
+		Thread t5 = new Thread(new MyRunnableInsert(con));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+	}
+
+	@Test
+	public void removeTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con));
+		Thread t2 = new Thread(new MyRunnableInsert(con));
+		Thread t3 = new Thread(new MyRunnableInsert(con));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+
+		tr.start();
+		tr.join();
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(15000, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void removeAllTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t2 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t3 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+
+		tr.start();
+		tr.join();
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(0, size(con.checkPoint.first()));
+		Assert.assertFalse(isSorted(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void removeNoOneTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con));
+		Thread t2 = new Thread(new MyRunnableInsert(con));
+		Thread t3 = new Thread(new MyRunnableInsert(con));
+		Thread t4 = new Thread(new MyRunnableInsert(con));
+		Thread t5 = new Thread(new MyRunnableInsert(con));
+		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+
+		tr.start();
+		tr.join();
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void removeAtFirstTest() {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
 		
 		{
-			Event event = new Event("teste", 2);
+			Event event = new Event("delete", 1);
 			con.insert(event);
 		}
 		{
-			Event event = new Event("teste", 1);
-			con.insert(event);
-		}
-		{
-			Event event = new Event("teste", 7);
-			con.insert(event);
-		}
-		{
-			Event event = new Event("teste", 5);
-			con.insert(event);
-		}
-		{
-			Event event = new Event("teste", 45);
-			con.insert(event);
-		}
-		{
-			Event event = new Event("teste", 7);
+			Event event = new Event("delete", 2);
 			con.insert(event);
 		}
 		{
@@ -46,252 +156,379 @@ public class ConcurrentSortedEventStoreTest {
 			Event event = new Event("teste", 6);
 			con.insert(event);
 		}
+		{
+			Event event = new Event("teste", 5);
+			con.insert(event);
+		}
 		
-		System.out.println(size(con.checkPoint.first()));
-		System.out.println(con.length());
-		System.out.println(isSorted(con.checkPoint.first()));
-		System.out.println(con.checkPoint.size());
-	}
-
-	@Test
-	public void threadInsertTest() throws InterruptedException {
-		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
-
-		Thread t1 = new Thread(new MyRunnableInsert(con));
-		Thread t2 = new Thread(new MyRunnableInsert(con));
-		Thread t3 = new Thread(new MyRunnableInsert(con));
-		Thread t4 = new Thread(new MyRunnableInsert(con));
-		Thread t5 = new Thread(new MyRunnableInsert(con));
-		Thread t6 = new Thread(new MyRunnableInsert(con));
-		Thread t7 = new Thread(new MyRunnableInsert(con));
-		Thread t8 = new Thread(new MyRunnableInsert(con));
-		Thread t9 = new Thread(new MyRunnableInsert(con));
-		Thread t10 = new Thread(new MyRunnableInsert(con));
-
-		long init = System.currentTimeMillis();
-
-		t1.start();
-		t2.start();
-		t3.start();
-		t4.start();
-		t5.start();
-		t6.start();
-		t7.start();
-		t8.start();
-		t9.start();
-		t10.start();
-
-		t1.join();
-		t2.join();
-		t3.join();
-		t4.join();
-		t5.join();
-		t6.join();
-		t7.join();
-		t8.join();
-		t9.join();
-		t10.join();
-
-		System.out.println("execution time: " + (System.currentTimeMillis() - init));
-
-		System.out.println(size(con.checkPoint.first()));
-		System.out.println(con.length());
-		System.out.println(isSorted(con.checkPoint.first()));
-		System.out.println(con.checkPoint.size());
+		con.removeAll("delete");
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(3, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
 	}
 	
 	@Test
-	public void threadInsertRemoveTest() throws InterruptedException {
+	public void removeAtLastTest() {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
-
-		Thread t1 = new Thread(new MyRunnableInsert(con));
-		Thread t2 = new Thread(new MyRunnableInsert(con));
-		Thread t3 = new Thread(new MyRunnableInsert(con));
-		Thread t4 = new Thread(new MyRunnableInsert(con));
-		Thread t5 = new Thread(new MyRunnableInsert(con));
-		Thread t6 = new Thread(new MyRunnableInsert(con));
-		Thread t7 = new Thread(new MyRunnableInsert(con));
-		Thread t8 = new Thread(new MyRunnableInsert(con));
-		Thread t9 = new Thread(new MyRunnableInsert(con));
-		Thread t10 = new Thread(new MyRunnableInsert(con, "delete"));
-		Thread t11 = new Thread(new MyRunnableRemove(con, "delete"));
-
-		long init = System.currentTimeMillis();
-
-		t1.start();
-		t2.start();
-		t3.start();
-		t4.start();
-		t5.start();
-		t6.start();
-		t7.start();
-		t8.start();
-		t9.start();
-		t10.start();
 		
-		Thread.sleep(1000);
-		t11.start();
+		{
+			Event event = new Event("teste", 1);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 2);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 3);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 6);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 5);
+			con.insert(event);
+		}
 		
-		t1.join();
-		t2.join();
-		t3.join();
-		t4.join();
-		t5.join();
-		t6.join();
-		t7.join();
-		t8.join();
-		t9.join();
-		t10.join();
-		t11.join();
+		con.removeAll("delete");
 		
-		
-
-		System.out.println("execution time: " + (System.currentTimeMillis() - init));
-
-		System.out.println(size(con.checkPoint.first()));
-		System.out.println(con.length());
-		System.out.println(isSorted(con.checkPoint.first()));
-		System.out.println(con.checkPoint.size());
-		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(3, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
 	}
 	
 	@Test
-	public void threadInsertQueryTest() throws InterruptedException {
+	public void removeAtMiddleTest() {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
-
-		Thread t1 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t2 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t3 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t4 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t5 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t6 = new Thread(new MyRunnableInsert(con));
-		Thread t7 = new Thread(new MyRunnableInsert(con));
-		Thread t8 = new Thread(new MyRunnableInsert(con));
-		Thread t9 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t10 = new Thread(new MyRunnableInsert(con, "query"));
-
-		long init = System.currentTimeMillis();
-
-		t1.start();
-		t2.start();
-		t3.start();
-		t4.start();
-		t5.start();
-		t6.start();
-		t7.start();
-		t8.start();
-		t9.start();
-		t10.start();
 		
-		t1.join();
-		t2.join();
-		t3.join();
-		t4.join();
-		t5.join();
-		t6.join();
-		t7.join();
-		t8.join();
-		t9.join();
-		t10.join();
+		{
+			Event event = new Event("teste", 1);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 2);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 3);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 6);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 5);
+			con.insert(event);
+		}
 		
-		EventIterator ei = con.query("query", 1000, 5000);
-
-		System.out.println("execution time: " + (System.currentTimeMillis() - init));
-
-		System.out.println(size(con.checkPoint.first()));
-		System.out.println(con.length());
-		System.out.println(isSorted(con.checkPoint.first()));
-		System.out.println(con.checkPoint.size());
-		System.out.println("newIterator: " + size((ConcurrentEventIterator) ei));
-		System.out.println("newIterator: " + size(ei));
-		System.out.println("newIterator: " + isSorted((ConcurrentEventIterator) ei));
-		System.out.println("newIterator: " + isSorted(ei));
+		con.removeAll("delete");
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(3, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
 	}
 	
 	@Test
-	public void threadInsertQueryRemoveTest() throws InterruptedException {
+	public void removeAtFirstAtMiddleAtLastTest() {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+		
+		{
+			Event event = new Event("delete", 1);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 2);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 3);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 6);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 5);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("teste", 8);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 4);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 7);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 10);
+			con.insert(event);
+		}
+		{
+			Event event = new Event("delete", 9);
+			con.insert(event);
+		}
+		
+		con.removeAll("delete");
+		
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+		Assert.assertEquals(2, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+
+	@Test
+	public void querySizeTest() throws InterruptedException {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
 
-		Thread t1 = new Thread(new MyRunnableInsert(con));
-		Thread t2 = new Thread(new MyRunnableInsert(con));
-		Thread t3 = new Thread(new MyRunnableInsert(con));
-		Thread t4 = new Thread(new MyRunnableInsert(con));
-		Thread t5 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t6 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t7 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t8 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t9 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t10 = new Thread(new MyRunnableInsert(con, "query"));
-		Thread t11 = new Thread(new MyRunnableRemove(con, "query"));
-
-		long init = System.currentTimeMillis();
+		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "query", 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "query", 20000L));
 
 		t1.start();
 		t2.start();
 		t3.start();
 		t4.start();
 		t5.start();
-		t6.start();
-		t7.start();
-		t8.start();
-		t9.start();
-		t10.start();
-		
-		Thread.sleep(3000);
-		EventIterator ei = con.query("query", 10000, 15000);
-		
-		Thread.sleep(2000);
-		t11.start();
-		
+
 		t1.join();
 		t2.join();
 		t3.join();
 		t4.join();
 		t5.join();
-		t6.join();
-		t7.join();
-		t8.join();
-		t9.join();
-		t10.join();
-		t11.join();
+
+		EventIterator it = con.query("query", 10000, 16000);
+
+		Assert.assertEquals(5000, size(it));
 		
-
-		System.out.println("execution time: " + (System.currentTimeMillis() - init));
-
-		System.out.println(size(con.checkPoint.first()));
-		System.out.println(con.length());
-		System.out.println(isSorted(con.checkPoint.first()));
-		System.out.println(con.checkPoint.size());
-		System.out.println("newIterator: " + size((ConcurrentEventIterator) ei));
-		System.out.println("newIterator: " + size(ei));
-		System.out.println("newIterator: " + isSorted((ConcurrentEventIterator) ei));
-		System.out.println(size((ConcurrentEventIterator) con.query("query", 10000, 15000)));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
 	}
 
+	@Test
+	public void querySortedTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "query", 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "query", 20000L));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		EventIterator it = con.query("query", 10000, 16000);
+
+		Assert.assertTrue(isSorted(it));
+		
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void queryNoResultSortedTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, 20000L));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		EventIterator it = con.query("query", 10000, 16000);
+
+		Assert.assertFalse(isSorted(it));
+		
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void queryNoResultSizeTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, 20000L));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+
+		EventIterator it = con.query("query", 10000, 16000);
+
+		Assert.assertEquals(0, size(it));
+		
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertEquals(con.length(), size(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void insertAndRemoveTogetherTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, "delete", 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete", 20000L));
+		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+		
+		Thread.sleep(500);
+		tr.start();
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+		tr.join();
+		
+		Assert.assertNotSame(25000, con.length());
+		Assert.assertNotSame(25000, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void insertAndQueryTogetherTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, "query", 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, "query", 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "query", 20000L));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+		
+		Thread.sleep(500);
+		EventIterator it = con.query("query", 0L, 20000L);
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+		
+		Assert.assertTrue(isSorted(it));
+		Assert.assertEquals(25000, con.length());
+		Assert.assertEquals(25000, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+	
+	@Test
+	public void insertAndRemoveAndQuerySameTogetherTest() throws InterruptedException {
+		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
+
+		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
+		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
+		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "delete", 10000L));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete", 20000L));
+		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
+
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+		
+		Thread.sleep(400);
+		tr.start();
+		
+		Thread.sleep(400);
+		EventIterator it = con.query("delete", 0L, 20000L);
+
+		t1.join();
+		t2.join();
+		t3.join();
+		t4.join();
+		t5.join();
+		tr.join();
+		
+		Assert.assertTrue(isSorted(it));
+		Assert.assertNotSame(25000, con.length());
+		Assert.assertNotSame(25000, size(con.checkPoint.first()));
+		Assert.assertTrue(isSorted(con.checkPoint.first()));
+	}
+	
 	private int size(ConcurrentEventIterator current) {
 		int count = 0;
+		
+		if (current.value == null) {
+			return count;
+		}
 
 		while (current != null) {
-			ReentrantLock lock = current.lock;
-			lock.lock();
-			try {
-				++count;
-				current = current.next;
-			} finally {
-				lock.unlock();
-			}
+			++count;
+			current = current.next;
 		}
 
 		return count;
 	}
-	
+
 	private int size(EventIterator current) {
 		int count = 0;
 
 		if (current == null) {
 			return 0;
 		}
-		
+
 		do {
 			++count;
 		} while (current.moveNext());
@@ -300,6 +537,9 @@ public class ConcurrentSortedEventStoreTest {
 	}
 
 	private boolean isSorted(ConcurrentEventIterator current) {
+		if (current.value == null) {
+			return false;
+		}
 
 		while (current != null && current.next != null) {
 			if (current.value.timestamp() > current.next.value.timestamp()) {
@@ -309,15 +549,15 @@ public class ConcurrentSortedEventStoreTest {
 		}
 		return true;
 	}
-	
+
 	private boolean isSorted(EventIterator it) {
-		
+
 		if (it == null || it.current() == null) {
 			return false;
 		}
-		
+
 		Event prev = it.current();
-		
+
 		do {
 			Event current = it.current();
 			if (current.timestamp() < prev.timestamp()) {
@@ -331,9 +571,10 @@ public class ConcurrentSortedEventStoreTest {
 }
 
 class MyRunnableInsert implements Runnable {
-	private ConcurrentSortedEventStore con = null;
+	private ConcurrentSortedEventStore con;
 	private String type = "teste";
-	
+	private Long start = null;
+
 	public MyRunnableInsert(ConcurrentSortedEventStore con) {
 		this.con = con;
 	}
@@ -343,28 +584,37 @@ class MyRunnableInsert implements Runnable {
 		this.type = type;
 	}
 
+	public MyRunnableInsert(ConcurrentSortedEventStore con, String type, Long start) {
+		this.con = con;
+		this.type = type;
+		this.start = start;
+	}
+
+	public MyRunnableInsert(ConcurrentSortedEventStore con, Long start) {
+		this.con = con;
+		this.start = start;
+	}
+
 	@Override
 	public void run() {
-		long init = System.currentTimeMillis();
-		
-		for (int i = 0; i < 5000; i++) {
-			Event event = new Event(type, new Random().nextInt(2000000));
-			con.insert(event);
+		if (start == null) {
+			for (int i = 0; i < 5000; i++) {
+				Event event = new Event(type, new Random().nextInt(2000000));
+				con.insert(event);
+			}
+		} else {
+			for (long i = start.longValue(); i < start.longValue() + 5000; i++) {
+				Event event = new Event(type, i);
+				con.insert(event);
+			}
 		}
-
-		System.out.println(
-				"execution time " + Thread.currentThread().getName() + ": " + (System.currentTimeMillis() - init));
 	}
 
 }
 
 class MyRunnableRemove implements Runnable {
-	private ConcurrentSortedEventStore con = null;
-	private String type = "teste";
-	
-	public MyRunnableRemove(ConcurrentSortedEventStore con) {
-		this.con = con;
-	}
+	private ConcurrentSortedEventStore con;
+	private String type;
 
 	public MyRunnableRemove(ConcurrentSortedEventStore con, String type) {
 		this.con = con;
@@ -373,12 +623,7 @@ class MyRunnableRemove implements Runnable {
 
 	@Override
 	public void run() {
-		long init = System.currentTimeMillis();
-		
 		con.removeAll(type);
-
-		System.out.println(
-				"execution time " + Thread.currentThread().getName() + ": " + (System.currentTimeMillis() - init));
 	}
 
 }
