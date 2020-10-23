@@ -376,6 +376,9 @@ public class ConcurrentSortedEventStore implements EventStore {
 		if (checkPoint.contains(fromElement)) {
 			checkPoint.add(toElement);
 			checkPoint.remove(fromElement);
+			if (checkPoint.isEmpty()) {
+				this.checkPoint.add(new ConcurrentEventIterator());
+			}
 		}
 	}
 
