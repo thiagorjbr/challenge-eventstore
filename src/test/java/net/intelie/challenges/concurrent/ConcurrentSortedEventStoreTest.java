@@ -412,11 +412,11 @@ public class ConcurrentSortedEventStoreTest {
 	public void insertAndRemoveTogetherTest() throws InterruptedException {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
 
-		Thread t1 = new Thread(new MyRunnableInsert(con, "delete", 5000L));
-		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
-		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
-		Thread t4 = new Thread(new MyRunnableInsert(con, 10000L));
-		Thread t5 = new Thread(new MyRunnableInsert(con, "delete", 20000L));
+		Thread t1 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t2 = new Thread(new MyRunnableInsert(con));
+		Thread t3 = new Thread(new MyRunnableInsert(con));
+		Thread t4 = new Thread(new MyRunnableInsert(con));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete"));
 		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
 
 		t1.start();
@@ -475,11 +475,11 @@ public class ConcurrentSortedEventStoreTest {
 	public void insertAndRemoveAndQuerySameTogetherTest() throws InterruptedException {
 		ConcurrentSortedEventStore con = new ConcurrentSortedEventStore(500);
 
-		Thread t1 = new Thread(new MyRunnableInsert(con, 5000L));
-		Thread t2 = new Thread(new MyRunnableInsert(con, 0L));
-		Thread t3 = new Thread(new MyRunnableInsert(con, 15000L));
-		Thread t4 = new Thread(new MyRunnableInsert(con, "delete", 10000L));
-		Thread t5 = new Thread(new MyRunnableInsert(con, "delete", 20000L));
+		Thread t1 = new Thread(new MyRunnableInsert(con));
+		Thread t2 = new Thread(new MyRunnableInsert(con));
+		Thread t3 = new Thread(new MyRunnableInsert(con));
+		Thread t4 = new Thread(new MyRunnableInsert(con, "delete"));
+		Thread t5 = new Thread(new MyRunnableInsert(con, "delete"));
 		Thread tr = new Thread(new MyRunnableRemove(con, "delete"));
 
 		t1.start();
